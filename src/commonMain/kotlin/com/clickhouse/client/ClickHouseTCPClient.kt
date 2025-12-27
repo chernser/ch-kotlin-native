@@ -13,10 +13,13 @@ import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_INTERSERVER_SECRET_V2
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_OPENTELEMETRY
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_PARALLEL_REPLICAS
+import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_QUERY_PLAN_SERIALIZATION
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_QUOTA_KEY_IN_CLIENT_INFO
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SERVER_DISPLAY_NAME
+import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SERVER_SETTINGS
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SERVER_TIMEZONE
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS
+import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_VERSIONED_CLUSTER_FUNCTION_PROTOCOL
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_VERSION_PATCH
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_TCP_PROTOCOL_VERSION
@@ -25,9 +28,9 @@ import io.ktor.network.sockets.*
 import io.ktor.util.date.*
 import io.ktor.util.logging.*
 import io.ktor.utils.io.*
-import io.ktor.utils.io.core.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.io.readLongLe
 import kotlin.experimental.and
 import kotlin.math.min
 
@@ -52,15 +55,17 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
                 .connect(hostname = host, port = port)
                 .connection()
 
-        with(connection.output) {
-            writeVarUInt(this, HELLO.toULong()) // hello packet ID
-            writeBinaryString(this,clientName)
-            writeVarUInt(this, 1u)
-            writeVarUInt(this, 0u)
-            writeVarUInt(this, DBMS_TCP_PROTOCOL_VERSION.toULong())
-            writeBinaryString(this, db)
-            writeBinaryString(this, user)
-            writeBinaryString(this, password)
+        val connWriter = LittleEndianWriter(connection.output)
+
+        with(connWriter) {
+            this.writeVarUInt( HELLO.toULong()) // hello packet ID
+            this.writeBinaryString(clientName)
+            this.writeVarUInt(1u)
+            this.writeVarUInt(0u)
+            this.writeVarUInt(DBMS_TCP_PROTOCOL_VERSION.toULong())
+            this.writeBinaryString(db)
+            this.writeBinaryString(user)
+            this.writeBinaryString(password)
             this.flush();
         }
 
@@ -78,6 +83,7 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
             log.info("versionName: $versionName, version: $versionMajor.$versionMinor, proto: $versionProto")
             // if version > DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL = 54471
             protoVersion = min(protoVersion, versionProto) // correct version
+            log.info("selected proto version: $protoVersion")
             if (protoVersion >= DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL) {
                 val versionProtoRep = readVarUInt(this);
                 log.info("replica proto version: $versionProtoRep")
@@ -115,37 +121,62 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
             }
             if (protoVersion >= DBMS_MIN_REVISION_WITH_INTERSERVER_SECRET_V2) {
                 // UInt64
-                val nonce = this.readLongLittleEndian().toUInt()
+                log.info("Reading nonce")
+                val nonce = this.readLong().toUInt()
                 log.info("nonce: $nonce")
             }
+
+//            if (protoVersion >= DBMS_MIN_REVISION_WITH_SERVER_SETTINGS)
+//            {
+//                if (is_interserver_mode ||
+//                    !session->sessionContext()->getSettingsRef()[Setting::apply_settings_from_server])
+//                Settings::writeEmpty(*out); // send empty list of setting changes
+//                else
+//                session->sessionContext()->getSettingsRef().write(*out, SettingsWriteFormat::STRINGS_WITH_FLAGS);
+//            }
+//
+//            if (protoVersion >= DBMS_MIN_REVISION_WITH_QUERY_PLAN_SERIALIZATION)
+//            {
+//                writeVarUInt(DBMS_QUERY_PLAN_SERIALIZATION_VERSION, *out);
+//            }
+//
+//            if (protoVersion >= DBMS_MIN_REVISION_WITH_VERSIONED_CLUSTER_FUNCTION_PROTOCOL)
+//            {
+//                writeVarUInt(DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION, *out);
+//            }
         }
 
         val quotaKey = "qk1"
-        with(connection.output) {
+        log.info("quotaKey: $quotaKey")
+        with(connWriter) {
             if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_ADDENDUM) {
                 if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_QUOTA_KEY) {
-                    writeBinaryString(this, quotaKey);
+                    writeBinaryString(quotaKey);
                 }
             }
 
             if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_CHUNKED_PACKETS) {
-                writeBinaryString(this, "notchunked")
-                writeBinaryString(this, "notchunked")
+                writeBinaryString("notchunked")
+                writeBinaryString("notchunked")
             }
 
             if (protoVersion >= DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL) {
-                writeVarUInt(this, DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL.toULong())
+                writeVarUInt(DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL.toULong())
             }
         }
 
+        log.info("Handshake completed")
+        connWriter.flush()
         activeConnection = connection
         return Result.success(connection)
     }
 
     suspend fun ping() : Boolean {
         if (activeConnection != null ) {
-            writeVarUInt(activeConnection!!.output, PING.toULong())
-            activeConnection!!.output.flush()
+            with(LittleEndianWriter(activeConnection!!.output)) {
+                writeVarUInt(PING.toULong())
+                flush()
+            }
             val packetType = readVarUInt(activeConnection!!.input)
             if (packetType == ServerPacketTypes.Pong) {
                 return true
@@ -158,10 +189,11 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
 
     suspend fun query(q: String, qId: String, params: Map<String, String>, opSettings: OperationSettings) : Result<Boolean> {
 
-        with (activeConnection!!.output) {
-            writeVarUInt(this, ClientPacketTypes.QUERY.toULong());
-            writeBinaryString(this, qId)
-            writeClientInfo(this, QueryKind.INITIAL_QUERY.toByte(), qId, opSettings)
+        with (LittleEndianWriter(activeConnection!!.output)) {
+            writeVarUInt( ClientPacketTypes.QUERY.toULong());
+            writeBinaryString(qId)
+
+            writeClientInfo(this,QueryKind.INITIAL_QUERY.toByte(), qId, opSettings)
 
             // write settings
             if (protoVersion >= DBMS_MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS) {
@@ -169,16 +201,15 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
             } else {
                 this.writeByte(SettingsWriteFormat.BINARY.toByte())
             }
-            writeBinaryString(this, "") // end of settings
+            this.writeBinaryString("") // end of settings
             // TODO: implement query settings
 
-            writeBinaryString(this, "") // interserver secret
+            this.writeBinaryString("") // interserver secret
 
-            writeVarUInt(this, QueryProcessingStage.FetchColumns.toULong()) // stage
-            writeVarUInt(this, 0uL) // compression (0 - disabled, 1 - enabled)
+            this.writeVarUInt(QueryProcessingStage.FetchColumns.toULong()) // stage
+            this.writeVarUInt( 0uL) // compression (0 - disabled, 1 - enabled)
 
-            writeBinaryString(this, q) // query itself
-
+            this.writeBinaryString(q) // query itself
 
             // write params
             if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_PARAMETERS) {
@@ -187,7 +218,7 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
                 } else {
                     this.writeByte(SettingsWriteFormat.BINARY.toByte())
                 }
-                writeBinaryString(this, "") // end of settings
+                this.writeBinaryString("") // end of settings
             }
         }
 
@@ -202,7 +233,7 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
         }
     }
 
-    private suspend fun writeTraceInfo(out: ByteWriteChannel, opSettings: OperationSettings) {
+    private suspend fun writeTraceInfo(out: LittleEndianWriter, opSettings: OperationSettings) {
         if (protoVersion >= DBMS_MIN_REVISION_WITH_OPENTELEMETRY)
         {
             out.writeByte(opSettings.traceId.toByte())
@@ -216,12 +247,12 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
                         UInt8 trace_flags = TRACE_FLAG_NONE;
                    }
                  */
-                out.writeLong(0L, ByteOrder.LITTLE_ENDIAN) // uuid[0]
-                out.writeLong(0L, ByteOrder.LITTLE_ENDIAN) // uuid[1]
+                out.writeLong(0L) // uuid[0]
+                out.writeLong(0L) // uuid[1]
 
-                out.writeLong(0L, ByteOrder.LITTLE_ENDIAN) // span ID
+                out.writeLong(0L) // span ID
                 val traceState = ""
-                writeBinaryString(out, traceState)
+                out.writeBinaryString(traceState)
                 val traceFlags = 0u.toByte()
                 out.writeByte(traceFlags)
             }
@@ -229,61 +260,54 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
 
     }
 
-    private suspend fun writeClientInfo(out: ByteWriteChannel, queryType: Byte, queryId: String,
+    private suspend fun writeClientInfo(out: LittleEndianWriter, queryType: Byte, queryId: String,
                                         opSettings: OperationSettings) {
         if (protoVersion < DBMS_MIN_REVISION_WITH_CLIENT_INFO) {
             return
         }
 
         out.writeByte(queryType)
-        writeBinaryString(out, user)
-        writeBinaryString(out, queryId)
-        writeBinaryString(out, address)
+        out.writeBinaryString(user)
+        out.writeBinaryString(queryId)
+        out.writeBinaryString(address)
 
         val now = GMTDate().timestamp * 1000.0
         if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_INITIAL_QUERY_START_TIME) {
-            out.writeDouble(now, ByteOrder.LITTLE_ENDIAN)
+            out.writeDouble(now)
         }
 
         out.writeByte(Interface.TCP.toByte())
 
-        writeBinaryString(out, "root") // os user
-        writeBinaryString(out, "localhost") // local host name
-        writeBinaryString(out, clientName) // local host name
-        writeVarUInt(out, 1u)
-        writeVarUInt(out, 0u)
-        writeVarUInt(out, DBMS_TCP_PROTOCOL_VERSION.toULong())
+        out.writeBinaryString("user01") // os user
+        out.writeBinaryString("localhost") // local host name
+        out.writeBinaryString(clientName) // local host name
+        out.writeVarUInt(1u)
+        out.writeVarUInt(0u)
+        out.writeVarUInt(DBMS_TCP_PROTOCOL_VERSION.toULong())
 
         val quotaKey = "key1"
         if (protoVersion >= DBMS_MIN_REVISION_WITH_QUOTA_KEY_IN_CLIENT_INFO) {
-            writeBinaryString(out, quotaKey)
+            out.writeBinaryString(quotaKey)
         }
 
         if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_DISTRIBUTED_DEPTH) {
-            writeVarUInt(out, 1u) // distributed depth
+            out.writeVarUInt(1u) // distributed depth
         }
 
         if (protoVersion >= DBMS_MIN_REVISION_WITH_VERSION_PATCH) {
-            writeVarUInt(out, 1u) // client_version_patch
+            out.writeVarUInt(1u) // client_version_patch
         }
 
         writeTraceInfo(out, opSettings)
 
         if (protoVersion >= DBMS_MIN_REVISION_WITH_PARALLEL_REPLICAS)
         {
-            writeVarUInt(out, 0u.toULong()) // collaborate_with_initiator
-            writeVarUInt(out, 0u.toULong()) // obsolete_count_participating_replicas
-            writeVarUInt(out, 0u.toULong()) // number_of_current_replica
+            out.writeVarUInt(0u.toULong()) // collaborate_with_initiator
+            out.writeVarUInt(0u.toULong()) // obsolete_count_participating_replicas
+            out.writeVarUInt(0u.toULong()) // number_of_current_replica
         }
     }
 
-    private suspend fun writeBinaryString(out: ByteWriteChannel, str: String): UInt {
-        val size = str.length.toUInt()
-        val bCount = writeVarUInt(out, size.toULong());
-
-        out.writeStringUtf8(str)
-        return bCount + size
-    }
 
     private suspend fun readBinaryString(input: ByteReadChannel): String {
         val size = readVarUInt(input)
@@ -292,21 +316,6 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
         return dst.decodeToString()
     }
 
-    private suspend fun writeVarUInt(out: ByteWriteChannel, value: ULong): UInt {
-        var v = value
-        var i = 0u
-        while (v > 0x7Fu) {
-            val x = (v and 0x7Fu).toUInt()
-            val b: UByte =( 0x80u or x).toUByte()
-            out.writeByte(b.toByte())
-            v = v shr 7
-            i++
-        }
-
-        out.writeByte(v.toByte())
-        i++
-        return i
-    }
 
     private suspend fun readVarUInt(read: ByteReadChannel): UInt {
         var r = 0u
@@ -438,5 +447,11 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
         val DBMS_MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS = 54429u
         val DBMS_MIN_REVISION_WITH_INTERSERVER_SECRET = 54441u
         val DBMS_MIN_PROTOCOL_VERSION_WITH_PARAMETERS = 54459u
+
+        val DBMS_MIN_REVISION_WITH_SERVER_SETTINGS = 54474u
+
+        val DBMS_MIN_REVISION_WITH_QUERY_PLAN_SERIALIZATION = 54477u
+
+        val DBMS_MIN_REVISION_WITH_VERSIONED_CLUSTER_FUNCTION_PROTOCOL = 54479u
     }
 }

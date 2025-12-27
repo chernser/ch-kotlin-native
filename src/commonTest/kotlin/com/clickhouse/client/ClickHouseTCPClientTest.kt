@@ -11,7 +11,8 @@ class ClickHouseTCPClientTest {
     @Test
     fun testConnect() = runBlocking {
 
-        val client = ClickHouseTCPClient("localhost", 9000)
+        val client = ClickHouseTCPClient("localhost", 9000,
+            "default", "", db = "default")
 
         client.connect().onSuccess {
             val connection = it
