@@ -1,6 +1,5 @@
 package com.clickhouse.client
 
-import com.clickhouse.client.ClickHouseTCPClient.ClientPacketTypes.HELLO
 import com.clickhouse.client.ClickHouseTCPClient.ClientPacketTypes.PING
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_ADDENDUM
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_CHUNKED_PACKETS
@@ -13,16 +12,15 @@ import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_INTERSERVER_SECRET_V2
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_OPENTELEMETRY
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_PARALLEL_REPLICAS
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_QUERY_PLAN_SERIALIZATION
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_QUOTA_KEY_IN_CLIENT_INFO
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SERVER_DISPLAY_NAME
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SERVER_SETTINGS
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SERVER_TIMEZONE
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_VERSIONED_CLUSTER_FUNCTION_PROTOCOL
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_VERSION_PATCH
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_TCP_PROTOCOL_VERSION
+import com.clickhouse.client.com.clickhouse.protocol.tcp.HelloReq
+import com.clickhouse.client.com.clickhouse.protocol.tcp.buildPacket
 import io.ktor.network.selector.*
 import io.ktor.network.sockets.*
 import io.ktor.util.date.*
@@ -30,7 +28,6 @@ import io.ktor.util.logging.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
-import kotlinx.io.readLongLe
 import kotlin.experimental.and
 import kotlin.math.min
 
@@ -57,17 +54,33 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
 
         val connWriter = LittleEndianWriter(connection.output)
 
-        with(connWriter) {
-            this.writeVarUInt( HELLO.toULong()) // hello packet ID
-            this.writeBinaryString(clientName)
-            this.writeVarUInt(1u)
-            this.writeVarUInt(0u)
-            this.writeVarUInt(DBMS_TCP_PROTOCOL_VERSION.toULong())
-            this.writeBinaryString(db)
-            this.writeBinaryString(user)
-            this.writeBinaryString(password)
-            this.flush();
+        val helloReq = buildPacket(HelloReq()){
+            set(HelloReq.clientNameF, clientName)
+            set(HelloReq.majorVersionF, 1u)
+            set(HelloReq.minorVersionF, 1u)
+            set(HelloReq.protoVersionF, DBMS_TCP_PROTOCOL_VERSION.toULong())
+            set(HelloReq.dbF, db)
+            set(HelloReq.usernameF, user)
+            set(HelloReq.passwordF, password)
         }
+
+        // TODO: write packet
+
+//        with(connWriter) {
+//            this.writeVarUInt( HELLO.toULong()) // hello packet ID
+//            this.writeBinaryString(clientName)
+//            this.writeVarUInt(1u)
+//            this.writeVarUInt(0u)
+//            this.writeVarUInt(DBMS_TCP_PROTOCOL_VERSION.toULong())
+//            this.writeBinaryString(db)
+//            this.writeBinaryString(user)
+//            this.writeBinaryString(password)
+//            this.flush();
+//        }
+
+//        val clientHello = ClientHello(clientName, 1u, 0u,
+//            DBMS_TCP_PROTOCOL_VERSION, db, user, password)
+//        clientHello.writeTo(connection.output)
 
 
 
@@ -427,7 +440,7 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
         val SSHChallenge = 18u              /// Return challenge for SSH signature signing
     }
 
-    private object ProtoVersions {
+    object ProtoVersions {
         val DBMS_TCP_PROTOCOL_VERSION = 54471u
         val DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL = 54471u
         val DBMS_MIN_REVISION_WITH_SERVER_TIMEZONE = 54058u
