@@ -1,7 +1,8 @@
 package com.clickhouse.client.com.clickhouse.protocol.tcp
 
 class HelloReq  : BasePacket(
-    definition = PacketDefinition(Packets.Ids.Hello, "hello_req", listOf(
+
+    definition = PacketDefinition(Packets.Client.Hello, "hello_req", listOf(
         clientNameF,
         majorVersionF,
         minorVersionF,

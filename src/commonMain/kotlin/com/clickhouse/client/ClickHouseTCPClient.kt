@@ -1,26 +1,17 @@
 package com.clickhouse.client
 
-import com.clickhouse.client.ClickHouseTCPClient.ClientPacketTypes.PING
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_ADDENDUM
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_CHUNKED_PACKETS
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_DISTRIBUTED_DEPTH
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_INITIAL_QUERY_START_TIME
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_PARAMETERS
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_PASSWORD_COMPLEXITY_RULES
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_QUOTA_KEY
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_CLIENT_INFO
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_INTERSERVER_SECRET_V2
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_OPENTELEMETRY
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_PARALLEL_REPLICAS
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_QUOTA_KEY_IN_CLIENT_INFO
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SERVER_DISPLAY_NAME
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SERVER_TIMEZONE
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_REVISION_WITH_VERSION_PATCH
 import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_TCP_PROTOCOL_VERSION
-import com.clickhouse.client.com.clickhouse.protocol.tcp.HelloReq
-import com.clickhouse.client.com.clickhouse.protocol.tcp.buildPacket
+import com.clickhouse.client.com.clickhouse.protocol.tcp.*
 import io.ktor.network.selector.*
 import io.ktor.network.sockets.*
 import io.ktor.util.date.*
@@ -29,7 +20,6 @@ import io.ktor.utils.io.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlin.experimental.and
-import kotlin.math.min
 
 class ClickHouseTCPClient(private val host: String, private val port: Int,
         private val user: String, private val password: String, private val db: String) {
@@ -64,119 +54,31 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
             set(HelloReq.passwordF, password)
         }
 
-        // TODO: write packet
+        // TBD: write helloReq
 
-//        with(connWriter) {
-//            this.writeVarUInt( HELLO.toULong()) // hello packet ID
-//            this.writeBinaryString(clientName)
-//            this.writeVarUInt(1u)
-//            this.writeVarUInt(0u)
-//            this.writeVarUInt(DBMS_TCP_PROTOCOL_VERSION.toULong())
-//            this.writeBinaryString(db)
-//            this.writeBinaryString(user)
-//            this.writeBinaryString(password)
-//            this.flush();
-//        }
+        val helloResp = HelloResp()
 
-//        val clientHello = ClientHello(clientName, 1u, 0u,
-//            DBMS_TCP_PROTOCOL_VERSION, db, user, password)
-//        clientHello.writeTo(connection.output)
+        // TBD: read response
 
 
-
-        with(connection.input) {
-            val packetType = readVarUInt(this)
-            if (packetType != 0u) {
-                throw RuntimeException("Invalid response from server: packetType = ${packetType}")
-            }
-            val versionName = readBinaryString(this)
-            val versionMajor = readVarUInt(this);
-            val versionMinor = readVarUInt(this);
-            val versionProto = readVarUInt(this);
-            log.info("versionName: $versionName, version: $versionMajor.$versionMinor, proto: $versionProto")
-            // if version > DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL = 54471
-            protoVersion = min(protoVersion, versionProto) // correct version
-            log.info("selected proto version: $protoVersion")
-            if (protoVersion >= DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL) {
-                val versionProtoRep = readVarUInt(this);
-                log.info("replica proto version: $versionProtoRep")
-            }
-            if (protoVersion >= DBMS_MIN_REVISION_WITH_SERVER_TIMEZONE) {
-                val timezome = readBinaryString(this)
-                log.info("server timezone: $timezome")
-            }
-            if (protoVersion >= DBMS_MIN_REVISION_WITH_SERVER_DISPLAY_NAME) {
-                val serverDisplayName = readBinaryString(this)
-                log.info("server display name: $serverDisplayName")
-            }
-            if (protoVersion >= DBMS_MIN_REVISION_WITH_VERSION_PATCH) {
-                val versionPatch = readVarUInt(this)
-                log.info("version patch: $versionPatch")
-            }
-
-            if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_CHUNKED_PACKETS) {
-                val protoCapsSend = readBinaryString(this)
-                val protoCapsRecv = readBinaryString(this)
-                log.info("protoCaps.send: $protoCapsSend")
-                log.info("protoCaps.recv: $protoCapsRecv")
-            }
-            if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_PASSWORD_COMPLEXITY_RULES) {
-                val count = readVarUInt(this).toInt()
-                log.info("password rules: $count")
-                for (i in 0 until count) {
-                    log.info("reading rules")
-                    val pattern = readBinaryString(this)
-                    log.info("pattern: $pattern")
-                    val exceptionMsg = readBinaryString(this)
-                    log.info("exceptionMsg")
-                    log.info("rule: $i -> pattern: $pattern, msg: $exceptionMsg")
-                }
-            }
-            if (protoVersion >= DBMS_MIN_REVISION_WITH_INTERSERVER_SECRET_V2) {
-                // UInt64
-                log.info("Reading nonce")
-                val nonce = this.readLong().toUInt()
-                log.info("nonce: $nonce")
-            }
-
-//            if (protoVersion >= DBMS_MIN_REVISION_WITH_SERVER_SETTINGS)
-//            {
-//                if (is_interserver_mode ||
-//                    !session->sessionContext()->getSettingsRef()[Setting::apply_settings_from_server])
-//                Settings::writeEmpty(*out); // send empty list of setting changes
-//                else
-//                session->sessionContext()->getSettingsRef().write(*out, SettingsWriteFormat::STRINGS_WITH_FLAGS);
-//            }
-//
-//            if (protoVersion >= DBMS_MIN_REVISION_WITH_QUERY_PLAN_SERIALIZATION)
-//            {
-//                writeVarUInt(DBMS_QUERY_PLAN_SERIALIZATION_VERSION, *out);
-//            }
-//
-//            if (protoVersion >= DBMS_MIN_REVISION_WITH_VERSIONED_CLUSTER_FUNCTION_PROTOCOL)
-//            {
-//                writeVarUInt(DBMS_CLUSTER_PROCESSING_PROTOCOL_VERSION, *out);
-//            }
-        }
-
+        // This is addendum
         val quotaKey = "qk1"
         log.info("quotaKey: $quotaKey")
-        with(connWriter) {
-            if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_ADDENDUM) {
-                if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_QUOTA_KEY) {
-                    writeBinaryString(quotaKey);
-                }
-            }
+        val answerFields = listOf<FieldDefinition>(
+            string("quotaKey", Versions.MIN_PROTOCOL_VERSION_WITH_QUOTA_KEY),
+            string("capsSend", Versions.MIN_PROTOCOL_VERSION_WITH_CHUNKED_PACKETS ), // check name
+            string("capsRecv", Versions.MIN_PROTOCOL_VERSION_WITH_CHUNKED_PACKETS ), // check name
+            varInt("repProtoVersion", Versions.MIN_SUPPORTED_PARALLEL_REPLICAS_PROTOCOL_VERSION),
+        )
 
-            if (protoVersion >= DBMS_MIN_PROTOCOL_VERSION_WITH_CHUNKED_PACKETS) {
-                writeBinaryString("notchunked")
-                writeBinaryString("notchunked")
-            }
+        val answerValues = mapOf<String, Any?>(
+            "quotaKey" to quotaKey,
+            "capsSend" to "notchunked",
+            "capsRecv" to "notchunked",
+            "repProtoVersion" to DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL.toULong(),
+        )
 
-            if (protoVersion >= DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL) {
-                writeVarUInt(DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL.toULong())
-            }
-        }
+        // TBD: Write answer
 
         log.info("Handshake completed")
         connWriter.flush()
@@ -186,14 +88,12 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
 
     suspend fun ping() : Boolean {
         if (activeConnection != null ) {
-            with(LittleEndianWriter(activeConnection!!.output)) {
-                writeVarUInt(PING.toULong())
-                flush()
-            }
-            val packetType = readVarUInt(activeConnection!!.input)
-            if (packetType == ServerPacketTypes.Pong) {
-                return true
-            }
+
+            val pingReq = buildPacket(Ping()){}
+            // TBD: send
+
+            val pong = Pong()
+            // TBD: recv
         }
 
         return false
