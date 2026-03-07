@@ -31,6 +31,8 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
 
     private var activeConnection: Connection? = null
 
+    private var activeConnCodec: PacketChannelCodec? = null
+
     private val address = "127.0.0.1:8123"
 
     private val clientName = "clickhouse-ktor-client"
@@ -42,7 +44,7 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
                 .connect(hostname = host, port = port)
                 .connection()
 
-        val connWriter = LittleEndianWriter(connection.output)
+        val codec = PacketChannelCodec(connection.output, connection.input)
 
         val helloReq = buildPacket(HelloReq()){
             set(HelloReq.clientNameF, clientName)
@@ -54,12 +56,11 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
             set(HelloReq.passwordF, password)
         }
 
-        // TBD: write helloReq
+        codec.writePacket(helloReq)
 
         val helloResp = HelloResp()
 
-        // TBD: read response
-
+        codec.readPacket(helloResp)
 
         // This is addendum
         val quotaKey = "qk1"
@@ -78,22 +79,23 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
             "repProtoVersion" to DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL.toULong(),
         )
 
-        // TBD: Write answer
+        codec.writeFields(answerFields, answerValues)
 
         log.info("Handshake completed")
-        connWriter.flush()
+        codec.flush()
         activeConnection = connection
+        activeConnCodec = codec
         return Result.success(connection)
     }
 
     suspend fun ping() : Boolean {
-        if (activeConnection != null ) {
+        if (activeConnection != null && activeConnCodec != null) {
 
             val pingReq = buildPacket(Ping()){}
-            // TBD: send
+            activeConnCodec!!.writePacket(pingReq)
 
             val pong = Pong()
-            // TBD: recv
+            activeConnCodec!!.readPacket(pong)
         }
 
         return false

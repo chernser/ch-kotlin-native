@@ -1,6 +1,6 @@
 package com.clickhouse.client.com.clickhouse.protocol.tcp
 
-class HelloResp : BasePacket(
+class HelloResp : BasePacket (
     definition = PacketDefinition(Packets.Server.Hello, "hello_resp", listOf(
         versionNameF,
         majorVersionF,
