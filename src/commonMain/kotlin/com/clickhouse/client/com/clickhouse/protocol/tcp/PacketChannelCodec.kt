@@ -114,7 +114,7 @@ class PacketChannelCodec(val output: ByteWriteChannel, val input: ByteReadChanne
 
     suspend fun flush() = output.flush()
 
-    fun close() = output.close()
+    suspend fun close() = output.flushAndClose()
 
     suspend fun writeBinaryString(str: String): UInt {
         val size = str.length.toUInt()

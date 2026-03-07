@@ -143,9 +143,10 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
 
     suspend fun disconnect() {
         if (activeConnection != null) {
-            activeConnection?.output?.close()
+            log.info("Disconnecting from server ${activeConnection!!.socket}")
+            activeConnection?.output?.flushAndClose()
             activeConnection?.input?.cancel()
-            activeConnection?.socket?.close();
+            activeConnection?.socket?.dispose()
         }
     }
 
