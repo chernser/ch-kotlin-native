@@ -10,21 +10,26 @@ class PacketChannelCodec(val output: ByteWriteChannel, val input: ByteReadChanne
     private val isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN
 
     suspend fun writePacket(packet: BasePacket) {
-        writeVarUInt(packet.definition.id.toULong());
+        writeVarUInt(packet.definition.id);
         packet.definition.fields.forEach { field ->
             writeField(packet.values[field.name], field)
         }
+        output.flush()
     }
 
     suspend fun writeField(value: Any?, field: FieldDefinition) {
-        when (field.type) {
-            FieldType.VarInt -> writeVarUInt(value as ULong)
-            FieldType.String -> writeBinaryString(value as String)
-            FieldType.Byte -> writeByte(value as Byte)
-            FieldType.Short -> writeShort(value as Short)
-            FieldType.Int -> writeInt(value as Int)
-            FieldType.Long -> writeLong(value as Long)
-            else -> throw RuntimeException("Unexpected field type: ${field.type}")
+        try {
+            when (field.type) {
+                FieldType.VarInt -> writeVarUInt(value as UInt)
+                FieldType.String -> writeBinaryString(value as String)
+                FieldType.Byte -> writeByte(value as Byte)
+                FieldType.Short -> writeShort(value as Short)
+                FieldType.Int -> writeInt(value as Int)
+                FieldType.Long -> writeLong(value as Long)
+                else -> throw RuntimeException("Unexpected field type: ${field.type}")
+            }
+        } catch (t: Throwable) {
+            throw RuntimeException("Failed writing field ${field.name} of type: ${field.type}", t)
         }
     }
 
@@ -113,16 +118,16 @@ class PacketChannelCodec(val output: ByteWriteChannel, val input: ByteReadChanne
 
     suspend fun writeBinaryString(str: String): UInt {
         val size = str.length.toUInt()
-        val bCount = this.writeVarUInt(size.toULong());
+        val bCount = this.writeVarUInt(size);
 
         output.writeStringUtf8(str)
         return bCount + size
     }
-    suspend fun writeVarUInt(value: ULong): UInt {
+    suspend fun writeVarUInt(value: UInt): UInt {
         var v = value
         var i = 0u
         while (v > 0x7Fu) {
-            val x = (v and 0x7Fu).toUInt()
+            val x = (v and 0x7Fu)
             val b: UByte =( 0x80u or x).toUByte()
             this.writeByte(b.toByte())
             v = v shr 7

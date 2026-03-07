@@ -48,7 +48,6 @@ object Packets {
         val SSHChallengeRequest     = 11u  // Request SSH signature challenge.
         val SSHChallengeResponse    = 12u  // Reply to SSH signature challenge.
         val QueryPlan               = 13u  // Query plan.
-
         val MAX = QueryPlan
     }
 }

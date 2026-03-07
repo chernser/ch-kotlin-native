@@ -48,9 +48,9 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
 
         val helloReq = buildPacket(HelloReq()){
             set(HelloReq.clientNameF, clientName)
-            set(HelloReq.majorVersionF, 1u)
-            set(HelloReq.minorVersionF, 1u)
-            set(HelloReq.protoVersionF, DBMS_TCP_PROTOCOL_VERSION.toULong())
+            set(HelloReq.majorVersionF, 1U)
+            set(HelloReq.minorVersionF, 1U)
+            set(HelloReq.protoVersionF, DBMS_TCP_PROTOCOL_VERSION)
             set(HelloReq.dbF, db)
             set(HelloReq.usernameF, user)
             set(HelloReq.passwordF, password)
@@ -76,7 +76,7 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
             "quotaKey" to quotaKey,
             "capsSend" to "notchunked",
             "capsRecv" to "notchunked",
-            "repProtoVersion" to DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL.toULong(),
+            "repProtoVersion" to DBMS_MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL,
         )
 
         codec.writeFields(answerFields, answerValues)
@@ -96,6 +96,7 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
 
             val pong = Pong()
             activeConnCodec!!.readPacket(pong)
+            return true
         }
 
         return false
