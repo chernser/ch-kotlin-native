@@ -1,12 +1,10 @@
 package com.clickhouse.client.com.clickhouse.protocol.tcp
 
-import com.clickhouse.client.ClickHouseTCPClient.ProtoVersions.DBMS_MIN_PROTOCOL_VERSION_WITH_PARAMETERS
-
 class QueryReq : BasePacket(
     PacketDefinition(
         Packets.Client.Query, "QueryReq", listOf(
             queryIdF,
-            // query Info
+            clientInfoF,
             settingsFormatF,
             settingsF,
             interServerSecretF,
@@ -22,6 +20,8 @@ class QueryReq : BasePacket(
 
     companion object {
         val queryIdF = string("queryId", 0u)
+
+        val clientInfoF = fragment("clientInfo", 0u)
         val settingsFormatF = byte("settingsFormat", 0u)
         val settingsF = string("settings", 0u)
         val interServerSecretF = string("interServerSecret", 0u)
@@ -32,7 +32,7 @@ class QueryReq : BasePacket(
 
         val sqlF = string("sqlF", 0u)
 
-        val queryParamsFormatF = varLong("queryParamsFormat", DBMS_MIN_PROTOCOL_VERSION_WITH_PARAMETERS)
-        val queryParamsF = string("queryParams", DBMS_MIN_PROTOCOL_VERSION_WITH_PARAMETERS)
+        val queryParamsFormatF = varLong("queryParamsFormat", Versions.MIN_PROTOCOL_VERSION_WITH_PARAMETERS)
+        val queryParamsF = string("queryParams", Versions.MIN_PROTOCOL_VERSION_WITH_PARAMETERS)
     }
 }

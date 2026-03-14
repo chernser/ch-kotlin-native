@@ -31,7 +31,6 @@ class ClickHouseHttpClient<THttpEngine : HttpClientEngineConfig>
     }
 
     val httpClient: HttpClient = HttpClient(httpEngine) {
-        this.developmentMode = true
         install(Logging) {
             logger = object : Logger {
                 override fun log(message: String) {

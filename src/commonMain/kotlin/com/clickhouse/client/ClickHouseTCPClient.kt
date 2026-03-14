@@ -89,12 +89,19 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
         return false
     }
 
+    private fun createClientInfo(): ClientInfoFragment {
+        val clientInfo = buildFragment(ClientInfoFragment(), {
+            set(ClientInfoFragment.clientName, clientName)
+        })
+
+        return clientInfo
+    }
 
     suspend fun query(sqlStmt: String, qId: String, params: Map<String, String>, opSettings: OperationSettings) : Result<Boolean> {
 
         val queryReq = buildPacket(QueryReq(), {
             set(QueryReq.queryIdF, qId)
-            // TBD client info
+            set(QueryReq.clientInfoF, createClientInfo())
             if (protoVersion >= Versions.MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS) {
                 set(QueryReq.settingsFormatF, SettingsWriteFormat.STRINGS_WITH_FLAGS.toULong())
             } else {

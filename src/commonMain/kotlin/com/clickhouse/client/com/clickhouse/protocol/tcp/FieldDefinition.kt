@@ -27,6 +27,8 @@ fun structEnd() = FieldDefinition("<END>", FieldType.StructEnd, 0u)
 fun collection(name: String, since: UInt) = FieldDefinition(name, FieldType.Collection, since)
 fun collectionEnd() = FieldDefinition("<END>", FieldType.CollectionEnd, 0u)
 
+fun fragment(name: String, since: UInt) = FieldDefinition(name, FieldType.Fragment, since)
+
 sealed class FieldType {
 
     object String : FieldType()
@@ -50,4 +52,6 @@ sealed class FieldType {
     object CollectionEnd : FieldType()
     object Struct : FieldType()
     object StructEnd : FieldType()
+
+    object Fragment : FieldType()
 }

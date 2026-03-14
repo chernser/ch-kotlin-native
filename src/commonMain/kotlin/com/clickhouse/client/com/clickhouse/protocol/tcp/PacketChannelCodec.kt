@@ -11,6 +11,7 @@ class PacketChannelCodec(val output: ByteWriteChannel, val input: ByteReadChanne
 
     suspend fun writePacket(packet: BasePacket) {
         writeVarUInt(packet.definition.id);
+
         packet.definition.fields.forEach { field ->
             writeField(packet.values[field.name], field)
         }
