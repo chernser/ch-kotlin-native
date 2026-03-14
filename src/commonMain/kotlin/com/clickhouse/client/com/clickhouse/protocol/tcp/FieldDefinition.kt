@@ -18,6 +18,8 @@ fun double(name: String, since: UInt) = FieldDefinition(name, FieldType.Double, 
 
 fun varInt(name: String, since: UInt) = FieldDefinition(name, FieldType.VarInt, since)
 
+fun varLong(name: String, since: UInt) = FieldDefinition(name, FieldType.VarLong, since)
+
 
 // Special
 fun struct(name: String, since: UInt) = FieldDefinition(name, FieldType.Struct, since)
@@ -29,6 +31,8 @@ sealed class FieldType {
 
     object String : FieldType()
     object VarInt : FieldType()
+
+    object VarLong : FieldType()
 
     object Byte : FieldType()
 
