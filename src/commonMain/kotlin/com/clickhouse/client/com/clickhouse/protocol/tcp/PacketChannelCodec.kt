@@ -5,8 +5,6 @@ import io.ktor.utils.io.core.*
 import kotlin.experimental.and
 
 class PacketChannelCodec(val output: ByteWriteChannel, val input: ByteReadChannel) {
-
-
     private val isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN
 
     suspend fun writePacket(packet: BasePacket) {
@@ -18,6 +16,14 @@ class PacketChannelCodec(val output: ByteWriteChannel, val input: ByteReadChanne
         output.flush()
     }
 
+    suspend fun writeFragment(fragment: BaseFragment) {
+        if (fragment.definition.predicate(fragment)) {
+            fragment.definition.fields.forEach { field ->
+                writeField(fragment.values[field.name], field)
+            }
+        }
+    }
+
     suspend fun writeField(value: Any?, field: FieldDefinition) {
         try {
             when (field.type) {
@@ -27,6 +33,8 @@ class PacketChannelCodec(val output: ByteWriteChannel, val input: ByteReadChanne
                 FieldType.Short -> writeShort(value as Short)
                 FieldType.Int -> writeInt(value as Int)
                 FieldType.Long -> writeLong(value as Long)
+                FieldType.Double -> writeDouble(value as Double)
+                FieldType.Fragment -> writeFragment(value as BaseFragment)
                 else -> throw RuntimeException("Unexpected field type: ${field.type}")
             }
         } catch (t: Throwable) {

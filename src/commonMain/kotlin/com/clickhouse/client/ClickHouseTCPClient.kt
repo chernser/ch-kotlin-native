@@ -7,6 +7,7 @@ import io.ktor.util.logging.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlin.time.Clock
 
 class ClickHouseTCPClient(private val host: String, private val port: Int,
         private val user: String, private val password: String, private val db: String) {
@@ -23,6 +24,10 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
     private val address = "127.0.0.1:8123"
 
     private val clientName = "clickhouse-ktor-client"
+
+    private fun getQuotaKey() : String {
+        return "quota_key1";
+    }
 
     suspend fun connect(): Result<Connection> {
 
@@ -50,8 +55,6 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
         codec.readPacket(helloResp)
 
         // This is addendum
-        val quotaKey = "qk1"
-        log.info("quotaKey: $quotaKey")
         val answerFields = listOf<FieldDefinition>(
             string("quotaKey", Versions.MIN_PROTOCOL_VERSION_WITH_QUOTA_KEY),
             string("capsSend", Versions.MIN_PROTOCOL_VERSION_WITH_CHUNKED_PACKETS ), // check name
@@ -60,7 +63,7 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
         )
 
         val answerValues = mapOf<String, Any?>(
-            "quotaKey" to quotaKey,
+            "quotaKey" to getQuotaKey(),
             "capsSend" to "notchunked",
             "capsRecv" to "notchunked",
             "repProtoVersion" to Versions.MIN_REVISION_WITH_VERSIONED_PARALLEL_REPLICAS_PROTOCOL,
@@ -89,19 +92,62 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
         return false
     }
 
-    private fun createClientInfo(): ClientInfoFragment {
+    private fun localhostIp() : String {
+        return "192.168.50.234"
+    }
+
+    private fun localHost() : String {
+        return "local.local"
+    }
+
+    private fun osUser() : String {
+        return "localuser"
+    }
+
+    private fun getDistributionDepth() : UInt {
+        return 1u;
+    }
+
+    private fun getClientVersionPatch() : UInt {
+        return 1u;
+    }
+
+    private fun fillReplicasConfig(fragment: ClientInfoFragment) {
+        fragment.set(ClientInfoFragment.collaborateWithInitiatorF, 0u)
+        fragment.set(ClientInfoFragment.obsoleteCountPartReplicasF, 0u)
+        fragment.set(ClientInfoFragment.numOfCurrentReplicasF, 0u)
+    }
+
+    private fun createClientInfo(qId: String, traceInfo: OtelTraceInfoFragment): ClientInfoFragment {
         val clientInfo = buildFragment(ClientInfoFragment(), {
-            set(ClientInfoFragment.clientName, clientName)
+            set(ClientInfoFragment.usernameF, user)
+            set(ClientInfoFragment.queryIdF, qId)
+            set(ClientInfoFragment.ipAddressF, localhostIp())
+            set(ClientInfoFragment.nowTimeF, Clock.System.now().toEpochMilliseconds().toDouble())
+            set(ClientInfoFragment.osUserF, osUser())
+            set(ClientInfoFragment.hostnameF, localHost())
+            set(ClientInfoFragment.clientNameF, clientName)
+            set(ClientInfoFragment.protoVersionF, protoVersion)
+            set(ClientInfoFragment.quotaKeyF, getQuotaKey())
+            set(ClientInfoFragment.distributionDepthF, getDistributionDepth())
+            set(ClientInfoFragment.clientVersionPatchF, getClientVersionPatch())
+            traceInfo.values[OtelTraceInfoFragment.traceIdF.name]?.let { set(OtelTraceInfoFragment.traceIdF, it) }
+            set(ClientInfoFragment.traceInfoF, traceInfo)
+            fillReplicasConfig(this)
         })
 
         return clientInfo
+    }
+
+    private fun createOtelTraceInfo() : OtelTraceInfoFragment {
+        return buildFragment(OtelTraceInfoFragment(), {})
     }
 
     suspend fun query(sqlStmt: String, qId: String, params: Map<String, String>, opSettings: OperationSettings) : Result<Boolean> {
 
         val queryReq = buildPacket(QueryReq(), {
             set(QueryReq.queryIdF, qId)
-            set(QueryReq.clientInfoF, createClientInfo())
+            set(QueryReq.clientInfoF, createClientInfo(qId, createOtelTraceInfo()))
             if (protoVersion >= Versions.MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS) {
                 set(QueryReq.settingsFormatF, SettingsWriteFormat.STRINGS_WITH_FLAGS.toULong())
             } else {
