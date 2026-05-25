@@ -149,19 +149,23 @@ class ClickHouseTCPClient(private val host: String, private val port: Int,
             set(QueryReq.queryIdF, qId)
             set(QueryReq.clientInfoF, createClientInfo(qId, createOtelTraceInfo()))
             if (protoVersion >= Versions.MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS) {
-                set(QueryReq.settingsFormatF, SettingsWriteFormat.STRINGS_WITH_FLAGS.toULong())
+                set(QueryReq.settingsF, "") // with flags
+                // todo: write settings as strings
             } else {
-                set(QueryReq.settingsFormatF, SettingsWriteFormat.BINARY.toULong())
+                // todo: write settings as binary
+                set(QueryReq.settingsF, "")
             }
 
-            set(QueryReq.queryStageF, QueryProcessingStage.FetchColumns)
+            set(QueryReq.extraRolesF, "") // todo: fill
+            set(QueryReq.interServerSecretF, "") // empty because we not in inter server mode
+            set(QueryReq.queryStageF, QueryReq.QueryStage.FetchColumns.v)  // todo: should be only for select ?
             set(QueryReq.compressionFlagF, 0u)
             set(QueryReq.sqlF, sqlStmt)
 
             if (protoVersion >= Versions.MIN_REVISION_WITH_SETTINGS_SERIALIZED_AS_STRINGS) {
-                set(QueryReq.queryParamsFormatF, SettingsWriteFormat.STRINGS_WITH_FLAGS.toByte())
+                set(QueryReq.queryParamsF, "") // with flags
             } else {
-                set(QueryReq.queryParamsFormatF, SettingsWriteFormat.BINARY.toByte())
+                set(QueryReq.queryParamsF, "") // without flags
             }
         })
 

@@ -38,7 +38,7 @@ class PacketChannelCodec(val output: ByteWriteChannel, val input: ByteReadChanne
                 else -> throw RuntimeException("Unexpected field type: ${field.type}")
             }
         } catch (t: Throwable) {
-            throw RuntimeException("Failed writing field ${field.name} of type: ${field.type}", t)
+            throw RuntimeException("Failed writing field `${field.name}` of type: `${field.type}`", t)
         }
     }
 

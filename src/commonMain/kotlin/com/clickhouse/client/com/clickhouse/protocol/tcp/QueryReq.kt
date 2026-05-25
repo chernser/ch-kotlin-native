@@ -5,13 +5,12 @@ class QueryReq : BasePacket(
         Packets.Client.Query, "QueryReq", listOf(
             queryIdF,
             clientInfoF,
-            settingsFormatF,
             settingsF,
+            extraRolesF,
             interServerSecretF,
             queryStageF,
             compressionFlagF,
             sqlF,
-            queryParamsFormatF,
             queryParamsF,
         )
 
@@ -22,17 +21,27 @@ class QueryReq : BasePacket(
         val queryIdF = string("queryId", 0u)
 
         val clientInfoF = fragment("clientInfo", 0u)
-        val settingsFormatF = byte("settingsFormat", 0u)
+
         val settingsF = string("settings", 0u)
+
+        val extraRolesF = string("extraRoles", 0u)
         val interServerSecretF = string("interServerSecret", 0u)
 
-        val queryStageF = varLong("queryStage", 0u)
+        val queryStageF = varInt("queryStage", 0u)
 
-        val compressionFlagF = varLong("compressionFlag", 0u)
+        val compressionFlagF = varInt("compressionFlag", 0u)
 
         val sqlF = string("sqlF", 0u)
-
-        val queryParamsFormatF = varLong("queryParamsFormat", Versions.MIN_PROTOCOL_VERSION_WITH_PARAMETERS)
         val queryParamsF = string("queryParams", Versions.MIN_PROTOCOL_VERSION_WITH_PARAMETERS)
+    }
+
+    enum class QueryStage(val v: UInt) {
+        FetchColumns(0u),
+        WithMergeableState(1u),
+        Complete(2u),
+        WithMergeableStateAfterAggregation(3u),
+        WithMergeableStateAfterAggregationAndLimit(4u),
+        Max(5u),
+        QueryPlan(7u), // when plan used
     }
 }
